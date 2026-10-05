@@ -13,6 +13,10 @@ class UserRepo:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
+    async def all(self) -> list[User]:
+        result = await self.session.execute(select(User).order_by(User.id))
+        return list(result.scalars())
+
 
 class BasinRepo:
     def __init__(self, session: AsyncSession):
@@ -26,12 +30,17 @@ class BasinRepo:
         )
         return result.scalars().first()
 
-    async def get(self, basin_id: int) -> Basin | None:
-        result = await self.session.execute(
+    async def get(self, basin_id: int, for_update: bool = False) -> Basin | None:
+        stmt = (
             select(Basin)
             .options(selectinload(Basin.readings))
             .where(Basin.id == basin_id)
         )
+        if for_update:
+            # 写汤温/改盆态先锁住这口盆：并发写同一盆时排队，
+            # 检查与提交落在同一事务里，最终只留一版合法值。
+            stmt = stmt.with_for_update()
+        result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def add_reading(self, basin: Basin, temp_c: float, operator: str) -> BathReading:
