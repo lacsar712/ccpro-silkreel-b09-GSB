@@ -26,6 +26,15 @@ async def seed_demo() -> None:
             worker.password_hash = hash_password("123456")
             worker.role = "worker"
 
+        # 第二名管理员：用于两名管理员交叉改同一盆的并发审计。
+        existing_a2 = await session.execute(select(User).where(User.username == "admin2"))
+        admin2 = existing_a2.scalar_one_or_none()
+        if admin2 is None:
+            session.add(User(username="admin2", password_hash=hash_password("123456"), role="admin"))
+        else:
+            admin2.password_hash = hash_password("123456")
+            admin2.role = "admin"
+
         mill = (await session.execute(select(Filature))).scalars().first()
         if mill:
             await session.commit()

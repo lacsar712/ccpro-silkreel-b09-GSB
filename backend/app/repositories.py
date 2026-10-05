@@ -13,6 +13,12 @@ class UserRepo:
         result = await self.session.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
+    async def all_by_role(self, role: str) -> list[User]:
+        result = await self.session.execute(
+            select(User).where(User.role == role).order_by(User.username)
+        )
+        return list(result.scalars().all())
+
 
 class BasinRepo:
     def __init__(self, session: AsyncSession):
@@ -34,13 +40,22 @@ class BasinRepo:
         )
         return result.scalar_one_or_none()
 
+    async def get_for_update(self, basin_id: int) -> Basin | None:
+        """行级锁取盆：两名管理员交叉改同一盆时在此串行化，只落一版值。"""
+        result = await self.session.execute(
+            select(Basin)
+            .options(selectinload(Basin.readings))
+            .where(Basin.id == basin_id)
+            .with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def add_reading(self, basin: Basin, temp_c: float, operator: str) -> BathReading:
         row = BathReading(basin=basin, water_temp_c=temp_c, operator=operator)
         self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
+        await self.session.flush()
         return row
 
     async def save_status(self, basin: Basin, status: str) -> None:
         basin.status = status
-        await self.session.commit()
+        await self.session.flush()
